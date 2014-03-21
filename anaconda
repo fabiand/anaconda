@@ -972,7 +972,8 @@ if __name__ == "__main__":
         ksFiles = [opts.ksfile]
     else:
         ksFiles = ["/tmp/updates/interactive-defaults.ks",
-                   "/usr/share/anaconda/interactive-defaults.ks"]
+                   "/usr/share/anaconda/interactive-defaults.ks",
+                   "/tmp/cmdline-args.ks"]
 
     for ks in ksFiles:
         if not os.path.exists(ks):

@@ -1,0 +1,109 @@
+
+import shlex
+import re
+import os
+
+class CmdlineParser(object):
+    """Create a kickstart based on kernel commandline arguments
+
+    To transform a ks directive into a cmdline arg follow this rules:
+    1. Remove leading -- from flags
+    2. Join all flags using ;
+    3. If there are flags, put the joined flags into braces
+    4. Take the directive, and append - if present - the braced flags
+    5. If there are positional aguments, append a = followed by all
+       remaining arguments
+
+    I.e.:
+
+        keyboard --vckeymap=us
+        rootpw --plaintext "foo bar"
+        repo --baseurl=ur1.ca/bar --cost=42
+
+    becomes
+
+        a.keyboard(vckeymap=us) a.rootpw(plaintext)="foo bar" \
+        a.repo(baseurl=ur1.ca/bar;cost=42)
+
+
+    >>> cmdline = ""
+    >>> cmdline += " a.keyboard(vckeymap=us)"
+    >>> cmdline += " a.auth(enableshadow;passalgo=512)"
+    >>> cmdline += " a.selinux(enforcing)"
+    >>> cmdline += " a.network(bootproto=dhcp)"
+    >>> cmdline += " a.rootpw(plaintext)=r"
+    >>> cmdline += " a.clearpart(all;initlabel)"
+    >>> cmdline += " a.%packages(excludedocs)"
+    >>> cmdline += " a.@core"
+
+    >>> parser = CmdlineParser(cmdline, "a.")
+    >>> print(parser.kickstart())
+    #
+    # Kickstart from cmdline generator
+    #
+    # Cmdline:  a.keyboard(vckeymap=us) a.auth(enableshadow;passalgo=512) \
+a.selinux(enforcing) a.network(bootproto=dhcp) a.rootpw(plaintext)=r \
+a.clearpart(all;initlabel) a.%packages(excludedocs) a.@core
+    # Length: 187
+    #
+    keyboard --vckeymap=us
+    auth --enableshadow --passalgo=512
+    selinux --enforcing
+    network --bootproto=dhcp
+    rootpw --plaintext r
+    clearpart --all --initlabel
+    %packages --excludedocs
+    @core
+    """
+
+    def __init__(self, cmdline):
+        self.cmdline = cmdline
+
+    def arg2directive(self, arg, flag_delimiter=";"):
+        key = None
+        val = None
+        args = []
+        if re.match("[%\w]+\(", arg):
+            match = re.match("([%\w]+)(?:\((.*)\))?(?:=(.*))?", arg)
+            key, args, val = match.groups()
+            args = ["--%s" % v for v in args.split(flag_delimiter)]
+        else:
+            key = arg
+        return " ".join(v for v in [key, " ".join(args), val] if v)
+
+    def cmdline2directives(self, prefix):
+        directives = []
+        args = [a[len(prefix):]
+                for a in shlex.split(self.cmdline) if a.startswith(prefix)]
+        for arg in args:
+            directives.append(self.arg2directive(arg))
+
+        return directives
+
+    def kickstart(self, prefix="inst.ks."):
+        ks = ["#",
+              "# Kickstart from cmdline generator",
+              "#",
+              "# Cmdline: "+ self.cmdline,
+              "# Length: %s" % len(self.cmdline),
+              "#",
+
+              "\n".join(self.cmdline2directives(prefix))
+              ]
+
+        return "\n".join(ks)
+
+
+
+if __name__ == "__main__":
+
+    with open("/proc/cmdline") as src:
+        cmdline = src.read()
+
+    parser = CmdlineParser(cmdline)
+
+
+    dstname = "/tmp/cmdline-args.ks"
+    os.makedirs(os.path.dirname(dstname))
+    with open(dstname, "w+") as dst:
+        dst.write(parser.kickstart())

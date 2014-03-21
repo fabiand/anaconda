@@ -1,0 +1,8 @@
+[Unit]
+#ConditionKernelCommandLine=inst.ks=cmdline
+Description=generates a kickstart from cmdline arguments
+Before=anaconda.service
+
+[Service]
+WorkingDirectory=/
+ExecStart=/usr/libexec/anaconda-ks-from-cmdline
